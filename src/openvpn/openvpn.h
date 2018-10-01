@@ -67,6 +67,10 @@ struct key_schedule
     /* optional TLS control channel wrapping */
     struct key_type tls_auth_key_type;
     struct key_ctx_bi tls_wrap_key;
+    
+    /* optional Transport Layer wrapping */
+    struct key_ctx_bi socket_wrap_key;
+    
 #else                           /* ENABLE_CRYPTO */
     int dummy;
 #endif                          /* ENABLE_CRYPTO */
@@ -99,6 +103,9 @@ struct context_buffers
 #ifdef ENABLE_CRYPTO
     struct buffer encrypt_buf;
     struct buffer decrypt_buf;
+    
+    struct buffer enc_link_buf;
+    struct buffer dec_link_buf;
 #endif
 
     /* workspace buffers for compression */

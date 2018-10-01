@@ -570,6 +570,11 @@ struct options
     /* Shared secret used for TLS control channel authenticated encryption */
     const char *tls_crypt_file;
     const char *tls_crypt_inline;
+    
+    /* Shared secret used for Transport Layer authenticated encryption */
+    bool socket_crypt_on;
+    const char *socket_crypt_file;
+    const char *socket_crypt_inline;
 
     /* Allow only one session */
     bool single_session;

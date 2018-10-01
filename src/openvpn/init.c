@@ -1693,9 +1693,6 @@ do_open_tun(struct context *c)
     if (c->c1.tuntap)
     {
         oldtunfd = c->c1.tuntap->fd;
-        free(c->c1.tuntap);
-        c->c1.tuntap = NULL;
-        c->c1.tuntap_owned = false;
     }
 #endif
 
@@ -2432,6 +2429,7 @@ key_schedule_free(struct key_schedule *ks, bool free_ssl_ctx)
     {
         tls_ctx_free(&ks->ssl_ctx);
         free_key_ctx_bi(&ks->tls_wrap_key);
+        free_key_ctx_bi(&ks->socket_wrap_key);
     }
 #endif /* ENABLE_CRYPTO */
     CLEAR(*ks);
@@ -2608,6 +2606,13 @@ do_init_crypto_tls_c1(struct context *c)
         {
             tls_crypt_init_key(&c->c1.ks.tls_wrap_key, options->tls_crypt_file,
                                options->tls_crypt_inline, options->tls_server);
+        }
+        
+        /* Transport Layer encryption+authentication (--socket-crypt) */
+        if (options->socket_crypt_on)
+        {
+            socket_crypt_init_key(&c->c1.ks.socket_wrap_key, options->socket_crypt_file,
+                               options->socket_crypt_inline, options->tls_server);
         }
 
         c->c1.ciphername = options->ciphername;
@@ -2832,6 +2837,12 @@ do_init_crypto_tls(struct context *c, const unsigned int flags)
         to.tls_wrap.opt.pid_persist = &c->c1.pid_persist;
         to.tls_wrap.opt.flags |= CO_PACKET_ID_LONG_FORM;
         tls_crypt_adjust_frame_parameters(&to.frame);
+    }
+    
+    /* Transport Layer handshake encryption (--socket-crypt) */
+    if (options->socket_crypt_on)
+    {
+        socket_crypt_adjust_frame_parameters(&to.frame);
     }
 
     /* If we are running over TCP, allow for
@@ -3172,6 +3183,9 @@ init_context_buffers(const struct frame *frame)
     b->aux_buf = alloc_buf(BUF_SIZE(frame));
 
 #ifdef ENABLE_CRYPTO
+    b->enc_link_buf = alloc_buf(BUF_SIZE(frame));
+    b->dec_link_buf = alloc_buf(BUF_SIZE(frame));
+    
     b->encrypt_buf = alloc_buf(BUF_SIZE(frame));
     b->decrypt_buf = alloc_buf(BUF_SIZE(frame));
 #endif
@@ -3199,6 +3213,9 @@ free_context_buffers(struct context_buffers *b)
 #endif
 
 #ifdef ENABLE_CRYPTO
+        free_buf(&b->enc_link_buf);
+        free_buf(&b->dec_link_buf);
+        
         free_buf(&b->encrypt_buf);
         free_buf(&b->decrypt_buf);
 #endif
@@ -4388,6 +4405,7 @@ inherit_context_child(struct context *dest,
     /* inherit SSL context */
     dest->c1.ks.ssl_ctx = src->c1.ks.ssl_ctx;
     dest->c1.ks.tls_wrap_key = src->c1.ks.tls_wrap_key;
+    dest->c1.ks.socket_wrap_key = src->c1.ks.socket_wrap_key;
     dest->c1.ks.tls_auth_key_type = src->c1.ks.tls_auth_key_type;
     /* inherit pre-NCP ciphers */
     dest->c1.ciphername = src->c1.ciphername;

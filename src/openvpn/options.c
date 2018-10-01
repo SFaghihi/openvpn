@@ -625,6 +625,13 @@ static const char usage_message[] =
     "                  attacks on the TLS stack and DoS attacks.\n"
     "                  key (required) provides the pre-shared key file.\n"
     "                  see --secret option for more info.\n"
+    "--socket-crypt key : Add an additional layer of authenticated encryption on top\n"
+    "                  of the Transport Layer to hide OpenVPN Protocol,\n"
+    "                  provide basic post-quantum security and protect against\n"
+    "                  attacks on the TLS stack and DoS attacks.\n"
+    "                  will also provide length unpredictablitiy through random sequences.\n"
+    "                  key (required) provides the pre-shared key file.\n"
+    "                  see --secret option for more info.\n"
     "--askpass [file]: Get PEM password from controlling tty before we daemonize.\n"
     "--auth-nocache  : Don't cache --askpass or --auth-user-pass passwords.\n"
     "--crl-verify crl ['dir']: Check peer certificate against a CRL.\n"
@@ -880,6 +887,9 @@ init_options(struct options *o, const bool init_gc)
 #ifdef ENABLE_X509ALTUSERNAME
     o->x509_username_field = X509_USERNAME_FIELD_DEFAULT;
 #endif
+    o->socket_crypt_on = false;
+    o->socket_crypt_file = NULL;
+    o->socket_crypt_inline = NULL;
 #endif /* ENABLE_CRYPTO */
 #ifdef ENABLE_PKCS11
     o->pkcs11_pin_cache_period = -1;
@@ -1803,6 +1813,8 @@ show_settings(const struct options *o)
 
     SHOW_STR(tls_auth_file);
     SHOW_STR(tls_crypt_file);
+    
+    SHOW_STR(socket_crypt_file);
 #endif /* ENABLE_CRYPTO */
 
 #ifdef ENABLE_PKCS11
@@ -2761,6 +2773,10 @@ options_postprocess_verify_ce(const struct options *options, const struct connec
         {
             msg(M_USAGE, "--tls-auth and --tls-crypt are mutually exclusive");
         }
+        if (options->socket_crypt_on && options->tls_crypt_file)
+        {
+            msg(M_USAGE, "--socket-crypt provides the security of --tls-crypt, and so is meant to be used with tls-auth only.");
+        }
     }
     else
     {
@@ -2795,6 +2811,7 @@ options_postprocess_verify_ce(const struct options *options, const struct connec
         MUST_BE_UNDEF(transition_window);
         MUST_BE_UNDEF(tls_auth_file);
         MUST_BE_UNDEF(tls_crypt_file);
+        MUST_BE_UNDEF(socket_crypt_file);
         MUST_BE_UNDEF(single_session);
 #ifdef ENABLE_PUSH_PEER_INFO
         MUST_BE_UNDEF(push_peer_info);
@@ -3329,6 +3346,8 @@ options_postprocess_filechecks(struct options *options)
                               options->tls_auth_file, R_OK, "--tls-auth");
     errs |= check_file_access(CHKACC_FILE|CHKACC_INLINE|CHKACC_PRIVATE,
                               options->tls_crypt_file, R_OK, "--tls-crypt");
+    errs |= check_file_access(CHKACC_FILE|CHKACC_INLINE|CHKACC_PRIVATE,
+                              options->socket_crypt_file, R_OK, "--socket-crypt");
     errs |= check_file_access(CHKACC_FILE|CHKACC_INLINE|CHKACC_PRIVATE,
                               options->shared_secret_file, R_OK, "--secret");
     errs |= check_file_access(CHKACC_DIRPATH|CHKACC_FILEXSTWR,
@@ -8090,6 +8109,16 @@ add_option(struct options *options,
             options->tls_crypt_inline = p[2];
         }
         options->tls_crypt_file = p[1];
+    }
+    else if (streq(p[0], "socket-crypt") && p[1] && !p[3])
+    {
+        VERIFY_PERMISSION(OPT_P_GENERAL);
+        if (streq(p[1], INLINE_FILE_TAG) && p[2])
+        {
+            options->socket_crypt_inline = p[2];
+        }
+        options->socket_crypt_file = p[1];
+        options->socket_crypt_on = true;
     }
     else if (streq(p[0], "key-method") && p[1] && !p[2])
     {

@@ -725,11 +725,22 @@ read_incoming_link(struct context *c)
     perf_push(PERF_READ_IN_LINK);
 
     c->c2.buf = c->c2.buffers->read_link_buf;
-    ASSERT(buf_init(&c->c2.buf, FRAME_HEADROOM_ADJ(&c->c2.frame, FRAME_HEADROOM_MARKER_READ_LINK)));
+    struct buffer *dec_buf = &c->c2.buffers->dec_link_buf;
+    if (c->options.socket_crypt_on)
+    {
+        ASSERT(buf_init(dec_buf, FRAME_HEADROOM_ADJ(&c->c2.frame, FRAME_HEADROOM_MARKER_READ_LINK)));
+    }
+    else
+    {
+        ASSERT(buf_init(&c->c2.buf, FRAME_HEADROOM_ADJ(&c->c2.frame, FRAME_HEADROOM_MARKER_READ_LINK)));
+    }
 
     status = link_socket_read(c->c2.link_socket,
                               &c->c2.buf,
-                              &c->c2.from);
+                              &c->c2.from,
+                              c->options.socket_crypt_on,
+                              dec_buf,
+                              &c->c1.ks.socket_wrap_key);
 
     if (socket_connection_reset(c->c2.link_socket, status))
     {
@@ -1370,7 +1381,21 @@ process_outgoing_link(struct context *c)
 
                 /* If Socks5 over UDP, prepend header */
                 socks_preprocess_outgoing_link(c, &to_addr, &size_delta);
-
+                
+                /* Encrypt and Authenticate packet, before send off */
+                if (c->options.socket_crypt_on)
+                {
+                    //msg(M_WARN, "SOCKET WRITE: wrapping buffer...");
+                    if (!socket_crypt_wrap(&c->c2.to_link, &c->c2.buffers->enc_link_buf, &c->c1.ks.socket_wrap_key))
+                    {
+                        msg(M_WARN, "SOCKET WRITE: wrapping failed!!!");
+                    }
+                    else
+                    {
+                        buf_assign(&c->c2.to_link, &c->c2.buffers->enc_link_buf);
+                    }
+                }
+    
                 /* Send packet */
                 size = link_socket_write(c->c2.link_socket,
                                          &c->c2.to_link,

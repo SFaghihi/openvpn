@@ -204,6 +204,7 @@ struct key_state
 };
 
 /** Control channel wrapping (--tls-auth/--tls-crypt) context */
+/** Also Transport Layer wrapping (--socket-crypt) context */
 struct tls_wrap_ctx
 {
     enum {
@@ -212,7 +213,7 @@ struct tls_wrap_ctx
         TLS_WRAP_CRYPT, /**< Control channel encryption and authentication */
     } mode;                     /**< Control channel wrapping mode */
     struct crypto_options opt;  /**< Crypto state */
-    struct buffer work;         /**< Work buffer (only for --tls-crypt) */
+    struct buffer work;         /**< Work buffer (only for --tls-crypt/--socket-crypt) */
 };
 
 /*
@@ -391,7 +392,7 @@ struct tls_session
 
     /* authenticate control packets */
     struct tls_wrap_ctx tls_wrap;
-
+    
     int initial_opcode;         /* our initial P_ opcode */
     struct session_id session_id; /* our random session ID */
 
